@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>こえのふしぎラボ｜豊橋技術科学大学 西村研究室</title>
+<meta name="description" content="こえのふしぎラボ：スマホでできる音声のふしぎ体験．豊橋技術科学大学 西村良太研究室 出前授業 2027.1.17">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <h1 class="site-title">🎤 こえのふしぎラボ</h1>
+    <p class="site-sub">豊橋技術科学大学 西村研究室 出前授業 2027.1.17</p>
+    <img class="hero-img" src="img/hero.jpg" alt="出前授業のようす">
+  </div>
+</header>
+
+<div class="sensei-mode-bar">
+  <label class="sensei-toggle">
+    <input type="checkbox" id="senseiModeToggle">
+    <span>🖥 せんせいモード（おおきくする）</span>
+  </label>
+</div>
+
+<nav class="tab-nav" id="tabNav">
+  <button class="tab-btn tab-see" data-tab="see">👀<br>こえを みる</button>
+  <button class="tab-btn tab-ai" data-tab="ai">🤖<br>AIと はなす</button>
+  <button class="tab-btn tab-aizuchi" data-tab="aizuchi">😊<br>あいづちくん</button>
+  <button class="tab-btn tab-speed" data-tab="speed">⏱<br>へんじの はやさ</button>
+</nav>
+
+<main id="main">
+
+  <!-- デモ①: こえを みる -->
+  <section class="demo-section theme-see" id="panel-see" data-panel="see">
+    <h2>👀 こえを みる（スペクトログラム）</h2>
+    <p class="lead">こえを だすと，どんな「形」に見えるかな？ 高い音・低い音で 形がかわるよ．</p>
+
+    <div class="card-scroll" id="seeTopicCards">
+      <button class="topic-card" data-topic="あ〜">あ〜</button>
+      <button class="topic-card" data-topic="い〜">い〜</button>
+      <button class="topic-card" data-topic="う〜">う〜</button>
+      <button class="topic-card" data-topic="え〜">え〜</button>
+      <button class="topic-card" data-topic="お〜">お〜</button>
+      <button class="topic-card" data-topic="高い声">高い声</button>
+      <button class="topic-card" data-topic="低い声">低い声</button>
+      <button class="topic-card" data-topic="はくしゅ">はくしゅ</button>
+      <button class="topic-card" data-topic="口ぶえ">口ぶえ</button>
+      <button class="topic-card" data-topic="ささやき声">ささやき声</button>
+    </div>
+    <div id="seeTopicBig" class="topic-big" aria-live="polite"></div>
+
+    <div class="spec-wrap">
+      <div class="spec-axis-y">
+        <span>高い ↑</span>
+        <span>8000</span>
+        <span>4000</span>
+        <span>2000</span>
+        <span>0</span>
+        <span>↓ 低い</span>
+      </div>
+      <canvas id="specCanvas" width="640" height="320"></canvas>
+    </div>
+    <div class="spec-axis-x">時間 →</div>
+
+    <div class="meter-row">
+      <div class="meter-box">
+        <span class="meter-label">いまの大きさ</span>
+        <div class="meter-bar-bg"><div class="meter-bar-fg" id="seeLevelBar"></div></div>
+      </div>
+      <div class="meter-box">
+        <span class="meter-label">いちばん強い高さ</span>
+        <span class="meter-value" id="seePeakFreq">-- Hz</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="big-btn btn-primary" id="seeStartBtn">▶ はじめる</button>
+      <button class="big-btn btn-secondary" id="seeStopBtn">⏸ とめる</button>
+      <button class="big-btn btn-secondary" id="seeSaveBtn">📷 のこす（画像を保存）</button>
+      <button class="big-btn btn-secondary" id="seeColorBtn">🎨 いろを かえる</button>
+    </div>
+
+    <div id="seeStatus" class="status-msg" aria-live="polite"></div>
+
+    <details class="hint-box">
+      <summary>💡 ヒント</summary>
+      <ul>
+        <li>「あ」と「い」で 形がちがうよ</li>
+        <li>同じ「あ」でも 人によってちがう ＝ 声の指もん</li>
+      </ul>
+    </details>
+  </section>
+
+  <!-- デモ②: AIと はなす -->
+  <section class="demo-section theme-ai" id="panel-ai" data-panel="ai">
+    <h2>🤖 AIが きいて・やくして・はなす</h2>
+    <p class="lead">はなした ことばを AIが 文字にして，外国語に やくして，声に出して よんでくれるよ．</p>
+
+    <div class="card-scroll" id="aiTopicCards">
+      <button class="topic-card" data-topic="じぶんの名前">じぶんの名前</button>
+      <button class="topic-card" data-topic="すきな食べもの">すきな食べもの</button>
+      <button class="topic-card" data-topic="なまむぎ なまごめ なまたまご">なまむぎ なまごめ なまたまご</button>
+      <button class="topic-card" data-topic="となりの きゃくは よく かき くう きゃくだ">となりの きゃくは よく かき くう きゃくだ</button>
+      <button class="topic-card" data-topic="きょうは なにをした？">きょうは なにをした？</button>
+    </div>
+    <div id="aiTopicBig" class="topic-big" aria-live="polite"></div>
+
+    <div class="btn-row">
+      <button class="big-btn btn-primary" id="aiStartBtn">▶ はなしかける</button>
+      <button class="big-btn btn-secondary" id="aiStopBtn">⏹ やめる</button>
+    </div>
+
+    <div class="lang-row">
+      <label for="aiLangSelect">やくす言葉：</label>
+      <select id="aiLangSelect">
+        <option value="none">やくさない</option>
+        <option value="en">英語</option>
+        <option value="zh-CN">中国語</option>
+        <option value="ko">韓国語</option>
+        <option value="es">スペイン語</option>
+        <option value="fr">フランス語</option>
+      </select>
+      <label class="switch-label">
+        <input type="checkbox" id="aiAutoSpeakToggle">
+        自動でよむ
+      </label>
+    </div>
+
+    <div id="aiResultList" class="ai-result-list" aria-live="polite"></div>
+
+    <div id="aiStatus" class="status-msg" aria-live="polite"></div>
+    <div id="aiUnsupported" class="unsupported-msg" hidden>
+      このブラウザでは 音声にんしきが つかえないよ．<br>
+      Chrome か Safari で ひらいてね．
+    </div>
+
+    <div class="memo-box">
+      <label for="aiMemoInput">✋ AIの聞きまちがい，見つけたら メモしよう</label>
+      <textarea id="aiMemoInput" rows="3" placeholder="れい：「うどん」が「ぶどん」に なってた！"></textarea>
+    </div>
+  </section>
+
+  <!-- デモ③: あいづちくん -->
+  <section class="demo-section theme-aizuchi" id="panel-aizuchi" data-panel="aizuchi">
+    <h2>😊 あいづちくん と はなす</h2>
+    <p class="lead">はなしかけると，あいづちくんが「うん」「へえ」と こたえてくれるよ．</p>
+
+    <div class="aizuchi-face-wrap">
+      <svg id="aizuchiFace" class="aizuchi-face" viewBox="0 0 200 200" width="200" height="200">
+        <circle cx="100" cy="100" r="90" fill="#FFE9B3" stroke="#333" stroke-width="4"/>
+        <g id="aizuchiEyeL">
+          <circle cx="70" cy="85" r="12" fill="#333"/>
+        </g>
+        <g id="aizuchiEyeR">
+          <circle cx="130" cy="85" r="12" fill="#333"/>
+        </g>
+        <path id="aizuchiMouth" d="M 75 130 Q 100 130 125 130" stroke="#333" stroke-width="5" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div class="aizuchi-name">あいづちくん</div>
+      <div id="aizuchiBubble" class="aizuchi-bubble" aria-live="polite"></div>
+    </div>
+
+    <div class="card-scroll" id="aizuchiTopicCards">
+      <button class="topic-card" data-topic="きのう たのしかったこと">きのう たのしかったこと</button>
+      <button class="topic-card" data-topic="すきな あそび">すきな あそび</button>
+      <button class="topic-card" data-topic="学校の きゅうしょく">学校の きゅうしょく</button>
+    </div>
+    <div id="aizuchiTopicBig" class="topic-big" aria-live="polite"></div>
+
+    <div class="meter-row">
+      <div class="meter-box">
+        <span class="meter-label">マイクの音</span>
+        <div class="meter-bar-bg"><div class="meter-bar-fg" id="aizuchiLevelBar"></div></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="big-btn btn-primary" id="aizuchiStartBtn">▶ はなしかける</button>
+      <button class="big-btn btn-secondary" id="aizuchiStopBtn">⏹ やめる</button>
+    </div>
+
+    <div class="speed-preset-row">
+      <span>へんじの はやさ：</span>
+      <button class="preset-btn" data-delay="200">はやい 0.2秒</button>
+      <button class="preset-btn" data-delay="500">ふつう 0.5秒</button>
+      <button class="preset-btn" data-delay="1500">おそい 1.5秒</button>
+      <input type="range" id="aizuchiDelaySlider" min="0" max="2000" step="50" value="500">
+      <span id="aizuchiDelayValue">500 ms</span>
+    </div>
+
+    <label class="switch-label">
+      <input type="checkbox" id="aizuchiOnOffToggle" checked>
+      あいづち ON / OFF
+    </label>
+
+    <div id="aizuchiStatus" class="status-msg" aria-live="polite"></div>
+  </section>
+
+  <!-- デモ④: へんじの はやさ じっけん -->
+  <section class="demo-section theme-speed" id="panel-speed" data-panel="speed">
+    <h2>⏱ へんじの はやさ じっけん</h2>
+    <p class="lead">AIの へんじが「はやい」時と「おそい」時で，きもちが どうかわるかな？</p>
+
+    <div class="btn-row">
+      <button class="big-btn btn-primary" id="speedStartBtn">▶ スタート</button>
+    </div>
+
+    <div id="speedStage" class="speed-stage" aria-live="polite"></div>
+
+    <div class="meter-row">
+      <div class="meter-box">
+        <span class="meter-label">マイクの音</span>
+        <div class="meter-bar-bg"><div class="meter-bar-fg" id="speedLevelBar"></div></div>
+      </div>
+    </div>
+
+    <div id="speedVoteArea" class="vote-area" hidden>
+      <p class="vote-question">どっちが きもちよかった？</p>
+      <div class="btn-row">
+        <button class="big-btn btn-primary" id="speedVoteABtn">1かいめ</button>
+        <button class="big-btn btn-primary" id="speedVoteBBtn">2かいめ</button>
+      </div>
+      <p id="speedReveal" class="speed-reveal"></p>
+    </div>
+
+    <div class="vote-result-box">
+      <h3>みんなの けっか</h3>
+      <div class="vote-bar-row">
+        <span>はやい</span>
+        <div class="vote-bar-bg"><div class="vote-bar-fg fast" id="speedFastBar"></div></div>
+        <span id="speedFastCount">0票</span>
+      </div>
+      <div class="vote-bar-row">
+        <span>おそい</span>
+        <div class="vote-bar-bg"><div class="vote-bar-fg slow" id="speedSlowBar"></div></div>
+        <span id="speedSlowCount">0票</span>
+      </div>
+      <button class="big-btn btn-secondary" id="speedResetBtn">けっかを けす</button>
+    </div>
+
+    <details class="hint-box">
+      <summary>💡 かいせつ</summary>
+      <p>日本語の会話では，へんじまでの「間（ま）」は 0.2秒くらい．1.5秒あくと「あれ？」と感じるんだって．</p>
+    </details>
+  </section>
+
+</main>
+
+<section class="info-card sensei-card">
+  <h3>👨‍🏫 せんせいの けんきゅう</h3>
+  <p>人と自然に おしゃべりできる AIを 作る研究を しています．</p>
+  <ul class="link-list">
+    <li><a href="https://youtu.be/YU_iEpFB5hA" target="_blank" rel="noopener">▶ 傾聴顔デモ（YouTube）</a></li>
+    <li><a href="https://youtu.be/NdIYHipB_tE" target="_blank" rel="noopener">▶ 応答タイミングデモ（YouTube）</a></li>
+    <li><a href="https://ryota.nishimura.name/" target="_blank" rel="noopener">🏠 研究室ページ</a></li>
+  </ul>
+</section>
+
+<section class="info-card parent-card">
+  <h3>👪 おうちの人へ</h3>
+  <p>マイクの音は スマホ・パソコンの中だけで つかい，サーバーには 送っていません．やくす（翻訳）ときだけ，文字（テキスト）を 翻訳サービスに 送ります．音声そのものは 送信しません．</p>
+</section>
+
+<footer class="site-footer">
+  <p>© 豊橋技術科学大学 情報・知能工学系 西村良太研究室</p>
+  <img class="qr-img" src="img/qr.png" alt="サイトのQRコード">
+  <p class="footer-url">https://sayonari.github.io/koe-no-fushigi/</p>
+  <p class="footer-credit">あいづちくんの声：VOICEVOX:ずんだもん</p>
+</footer>
+
+<script src="common.js"></script>
+<script src="demo1.js"></script>
+<script src="demo2.js"></script>
+<script src="demo3.js"></script>
+<script src="demo4.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
