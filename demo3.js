@@ -1,14 +1,10 @@
-/* demo3.js — ③「あいづちくん と はなす」 */
+/* demo3.js — ③「あいづちくん と はなす」（vad.js / strip.js を利用） */
 (function (global) {
   'use strict';
   const KoeLab = global.KoeLab;
 
-  const MIN_THRESHOLD = 0.02;      // ノイズ床がとても小さい時の下限
-  const CALIBRATE_MS = 1500;       // ノイズ床を測る時間
-  const SPEECH_MIN_MS = 500;       // これ以上続いたら「発話中」とみなす
-  const LONG_SPEECH_MS = 3000;     // これ以上続いたら定期あいづちを入れる
-  const PERIODIC_INTERVAL_MS = 2500;
-  const MUTE_AFTER_MS = 400;       // あいづち再生後にマイク判定を止める時間
+  const MIN_SPEECH_MS = 300;     // これ未満は咳・物音として無視
+  const REPEAT_GUARD_MS = 1500;  // 直前の相槌からこの時間内は定期あいづちを出さない
 
   const END_WORDS = [
     { file: 'hee.wav', text: 'へえ' },
@@ -26,27 +22,33 @@
     running: false,
     analyser: null,
     source: null,
-    timeData: null,
-    rafId: null,
-    noiseFloor: 0,
-    threshold: MIN_THRESHOLD,
-    calibrating: false,
-    calibStart: 0,
-    calibSamples: [],
-    speaking: false,
-    speechStartTime: 0,
-    silenceStartTime: 0,
-    lastPeriodicTime: 0,
-    muted: false,
-    delayMs: 500,
-    aizuchiOn: true
+    vad: null,
+    strip: null,
+    stripRafId: null,
+    delayMs: 400,
+    aizuchiOn: true,
+    lastEndWord: null,
+    lastAizuchiAt: 0,
+    debugSource: null
   };
 
   function $(id) { return document.getElementById(id); }
-  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function pick(arr, avoid) {
+    let choices = arr;
+    if (avoid) {
+      const filtered = arr.filter(function (w) { return w.file !== avoid.file; });
+      if (filtered.length) choices = filtered;
+    }
+    return choices[Math.floor(Math.random() * choices.length)];
+  }
 
   function setStatus(msg) {
     const el = $('aizuchiStatus');
+    if (el) el.textContent = msg || '';
+  }
+
+  function setStateBig(msg) {
+    const el = $('aizuchiStateBig');
     if (el) el.textContent = msg || '';
   }
 
@@ -59,8 +61,7 @@
     const face = $('aizuchiFace');
     if (!face) return;
     face.classList.remove('nod');
-    // 強制再描画してからクラスを付け直す（アニメーション再生のため）
-    void face.offsetWidth;
+    void face.offsetWidth; // 強制再描画してからクラスを付け直す（アニメーション再生のため）
     face.classList.add('nod');
     const mouth = $('aizuchiMouth');
     if (mouth) {
@@ -71,93 +72,107 @@
     }
   }
 
-  async function playAizuchi(word) {
+  async function playAizuchi(word, markerT) {
     const d = Demo3;
-    d.muted = true;
     setBubble(word.text);
     if (d.aizuchiOn) playNod();
+    if (d.strip) d.strip.addMarker(markerT, word.text, '#e65100');
+    setStateBig('（あいづち）');
+    if (d.vad) d.vad.mute(5000); // 自分の声を拾わないよう再生中は判定を止める
     await KoeLab.playAudioOrSpeak('audio/' + word.file, word.text, 'ja-JP');
-    setTimeout(function () {
-      d.muted = false;
-      d.speaking = false;
-      d.speechStartTime = 0;
-      d.silenceStartTime = 0;
-    }, MUTE_AFTER_MS);
+    if (d.vad) d.vad.mute(300);
+    d.lastAizuchiAt = performance.now();
   }
 
-  function analyze() {
-    const d = Demo3;
-    if (!d.analyser) return;
-    d.analyser.getByteTimeDomainData(d.timeData);
-    const rms = KoeLab.computeRMS(d.timeData);
-
-    const levelBar = $('aizuchiLevelBar');
-    if (levelBar) levelBar.style.width = Math.min(100, Math.round(rms * 220)) + '%';
-
-    const now = performance.now();
-
-    if (d.calibrating) {
-      d.calibSamples.push(rms);
-      if (now - d.calibStart >= CALIBRATE_MS) {
-        const avg = d.calibSamples.reduce(function (a, b) { return a + b; }, 0) / Math.max(1, d.calibSamples.length);
-        d.noiseFloor = avg;
-        d.threshold = Math.max(avg * 3, MIN_THRESHOLD);
-        d.calibrating = false;
-        setStatus('');
-      }
-      d.rafId = requestAnimationFrame(analyze);
-      return;
-    }
-
-    if (d.muted) {
-      d.rafId = requestAnimationFrame(analyze);
-      return;
-    }
-
+  function handleSpeechStart() {
+    setStateBig('はなしてるね！');
     const face = $('aizuchiFace');
-    const isLoud = rms > d.threshold;
+    if (face) face.classList.add('listening');
+  }
 
-    if (isLoud) {
-      d.silenceStartTime = 0;
-      if (!d.speechStartTime) d.speechStartTime = now;
-      const duration = now - d.speechStartTime;
+  function handleSpeechEnd(t, durMs, hangoverMs) {
+    const d = Demo3;
+    const face = $('aizuchiFace');
+    if (face) face.classList.remove('listening');
+    setStateBig('きいてるよ…');
+    if (durMs < MIN_SPEECH_MS) return; // 咳・物音は無視
+    if (!d.aizuchiOn) return;
+    // t は発話の実際の終わり．検出には hangover 分すでに経っているので，その分を差し引いて待つ
+    const wait = Math.max(0, d.delayMs - (hangoverMs || 0));
+    setTimeout(function () {
+      if (!d.running) return;
+      const word = pick(END_WORDS, d.lastEndWord);
+      d.lastEndWord = word;
+      playAizuchi(word, t);
+    }, wait);
+  }
 
-      if (duration >= SPEECH_MIN_MS && !d.speaking) {
-        d.speaking = true;
-        d.lastPeriodicTime = now;
-        if (face) face.classList.add('listening');
-      }
+  function handleLongSpeech(t) {
+    const d = Demo3;
+    if (!d.aizuchiOn) return;
+    if (performance.now() - d.lastAizuchiAt < REPEAT_GUARD_MS) return;
+    playAizuchi(pick(MID_WORDS), t);
+  }
 
-      if (d.speaking && duration >= LONG_SPEECH_MS && (now - d.lastPeriodicTime) >= PERIODIC_INTERVAL_MS) {
-        d.lastPeriodicTime = now;
-        if (d.aizuchiOn) {
-          playAizuchi(pick(MID_WORDS));
-        }
-      }
-    } else {
-      if (d.speaking) {
-        if (!d.silenceStartTime) d.silenceStartTime = now;
-        if (now - d.silenceStartTime >= 300) {
-          // 発話おわり
-          const face2 = $('aizuchiFace');
-          if (face2) face2.classList.remove('listening');
-          if (d.aizuchiOn) {
-            setTimeout(function () {
-              if (d.running) playAizuchi(pick(END_WORDS));
-            }, d.delayMs);
-          } else {
-            d.speaking = false;
-            d.speechStartTime = 0;
-          }
-          d.silenceStartTime = 0;
-          if (!d.aizuchiOn) { /* 何もしない：無反応モード */ }
-        }
-      } else {
-        d.speechStartTime = 0;
-      }
+  function handleFrame(f) {
+    const d = Demo3;
+    const levelBar = $('aizuchiLevelBar');
+    if (levelBar) levelBar.style.width = Math.min(100, Math.round(f.rms * 220)) + '%';
+    if (d.strip) d.strip.pushFrame(f);
+    if (f.calibrating) { setStateBig('しずかにしてね…'); d.wasCalibrating = true; }
+    else if (d.wasCalibrating) { d.wasCalibrating = false; setStateBig('きいてるよ…'); }
+  }
+
+  function stripLoop() {
+    if (Demo3.strip) Demo3.strip.render(performance.now() - (Demo3.stripStart || 0));
+    Demo3.stripRafId = requestAnimationFrame(stripLoop);
+  }
+
+  function setupVad(analyser) {
+    const d = Demo3;
+    const sens = $('aizuchiSensSlider');
+    d.vad = KoeLab.createVAD(analyser, {
+      onMargin: sens ? Number(sens.value) : 9,
+      onSpeechStart: handleSpeechStart,
+      onSpeechEnd: handleSpeechEnd,
+      onLongSpeech: handleLongSpeech,
+      onFrame: handleFrame
+    });
+    return d.vad;
+  }
+
+  // analyser・vad を用意する（マイクの有無に関係なく呼べる：デバッグ用に必須）
+  function ensureAnalyserAndVad() {
+    const d = Demo3;
+    const audioCtx = KoeLab.getAudioContext();
+    if (!d.analyser) {
+      d.analyser = audioCtx.createAnalyser();
+      d.analyser.fftSize = 1024;
+      d.analyser.smoothingTimeConstant = 0;
     }
+    if (!d.vad) setupVad(d.analyser);
+    return d.analyser;
+  }
 
-    d.rafId = requestAnimationFrame(analyze);
+  // 画面まわりの共通の「開始」処理（マイク／デバッグ音源どちらでも呼ぶ）
+  function beginRunningUi() {
+    const d = Demo3;
+    d.running = true;
+    KoeLab.preloadWavs(['un','unun','hai','hee','sounanda','fuun','naruhodo'].map(function (n) { return 'audio/' + n + '.wav'; }));
+    setStatus('');
+    setBubble('');
+    setStateBig('しずかにしてね…');
+
+    $('aizuchiStartBtn').disabled = true;
+    $('aizuchiStopBtn').disabled = false;
+
+    if (!d.strip) {
+      const canvas = $('aizuchiStripCanvas');
+      if (canvas) d.strip = KoeLab.createStrip(canvas, { windowMs: 8000, tracks: 1 });
+    }
+    d.stripStart = performance.now();
+    d.vad.start();
+    if (!d.stripRafId) stripLoop();
   }
 
   function start() {
@@ -166,37 +181,17 @@
     setStatus('マイクを じゅんびしているよ…');
 
     KoeLab.getMicStream().then(function (stream) {
-      const audioCtx = KoeLab.getAudioContext();
-      if (!audioCtx) {
+      const analyser = ensureAnalyserAndVad();
+      if (!analyser) {
         setStatus('このブラウザでは マイクのかいせきが つかえないよ．');
         return;
       }
-      if (!d.analyser) {
-        d.analyser = audioCtx.createAnalyser();
-        d.analyser.fftSize = 2048;
-        d.analyser.smoothingTimeConstant = 0.2;
-        d.timeData = new Uint8Array(d.analyser.fftSize);
-      }
       if (!d.source) {
+        const audioCtx = KoeLab.getAudioContext();
         d.source = audioCtx.createMediaStreamSource(stream);
-        d.source.connect(d.analyser);
+        d.source.connect(analyser);
       }
-
-      d.running = true;
-      d.calibrating = true;
-      d.calibStart = performance.now();
-      d.calibSamples = [];
-      d.speaking = false;
-      d.speechStartTime = 0;
-      d.silenceStartTime = 0;
-      d.muted = false;
-      setStatus('しずかな音を はかっているよ…（少し待ってね）');
-      setBubble('');
-
-      $('aizuchiStartBtn').disabled = true;
-      $('aizuchiStopBtn').disabled = false;
-
-      analyze();
+      beginRunningUi();
     }).catch(function (err) {
       setStatus(KoeLab.micErrorMessage(err));
     });
@@ -205,16 +200,43 @@
   function stop() {
     const d = Demo3;
     d.running = false;
-    d.speaking = false;
-    if (d.rafId) cancelAnimationFrame(d.rafId);
-    d.rafId = null;
+    if (d.vad) d.vad.stop();
+    if (d.stripRafId) cancelAnimationFrame(d.stripRafId);
+    d.stripRafId = null;
     const face = $('aizuchiFace');
     if (face) face.classList.remove('listening');
     setBubble('');
+    setStateBig('');
     const startBtn = $('aizuchiStartBtn');
     const stopBtn = $('aizuchiStopBtn');
     if (startBtn) startBtn.disabled = false;
     if (stopBtn) stopBtn.disabled = true;
+  }
+
+  function initDebugButton() {
+    if (!KoeLab.isDebugMode()) return;
+    const btnRow = document.querySelector('#panel-aizuchi .btn-row');
+    if (!btnRow) return;
+    const btn = document.createElement('button');
+    btn.className = 'big-btn btn-secondary';
+    btn.textContent = '🧪 テスト音源で再生（audio/q3.wav）';
+    btnRow.appendChild(btn);
+    btn.addEventListener('click', function () {
+      const d = Demo3;
+      // マイクを使わず，analyser・vad だけ用意して動かす（マイク無し実機確認用）
+      if (!d.running) {
+        ensureAnalyserAndVad();
+        beginRunningUi();
+      }
+      const waitCalib = setInterval(function () {
+        if (!d.vad) return;
+        if (d.vad.isCalibrating()) return;
+        clearInterval(waitCalib);
+        if (d.debugSource) d.debugSource.stop();
+        d.debugSource = KoeLab.debugAudioSource('audio/q3.wav');
+        d.debugSource.play(d.analyser);
+      }, 50);
+    });
   }
 
   function init() {
@@ -225,7 +247,7 @@
 
     const slider = $('aizuchiDelaySlider');
     const valueEl = $('aizuchiDelayValue');
-    const presetBtns = document.querySelectorAll('.preset-btn');
+    const presetBtns = document.querySelectorAll('#panel-aizuchi .preset-btn');
 
     function setDelay(ms) {
       Demo3.delayMs = ms;
@@ -242,13 +264,40 @@
     presetBtns.forEach(function (b) {
       b.addEventListener('click', function () { setDelay(Number(b.dataset.delay)); });
     });
-    setDelay(500);
+    setDelay(400);
 
     const onOffToggle = $('aizuchiOnOffToggle');
     if (onOffToggle) {
       Demo3.aizuchiOn = onOffToggle.checked;
       onOffToggle.addEventListener('change', function () {
         Demo3.aizuchiOn = onOffToggle.checked;
+      });
+    }
+
+    const sensSlider = $('aizuchiSensSlider');
+    const sensValue = $('aizuchiSensValue');
+    if (sensSlider) {
+      sensSlider.addEventListener('input', function () {
+        const v = Number(sensSlider.value);
+        if (sensValue) sensValue.textContent = v + ' dB';
+        if (Demo3.vad) Demo3.vad.setOnMargin(v);
+      });
+    }
+
+    const calibBtn = $('aizuchiCalibBtn');
+    if (calibBtn) {
+      calibBtn.addEventListener('click', function () {
+        if (Demo3.vad) {
+          Demo3.vad.recalibrate(1000);
+          setStateBig('しずかにしてね…');
+        }
+      });
+    }
+
+    const detailToggle = $('aizuchiDetailToggle');
+    if (detailToggle) {
+      detailToggle.addEventListener('change', function () {
+        if (Demo3.strip) Demo3.strip.setDetail(detailToggle.checked);
       });
     }
 
@@ -261,7 +310,9 @@
         if (big) big.textContent = btn.dataset.topic;
       });
     });
+
+    initDebugButton();
   }
 
-  KoeLab.Demo3 = { init: init, start: start, stop: stop };
+  KoeLab.Demo3 = { init: init, start: start, stop: stop, _d: Demo3 };
 })(window);

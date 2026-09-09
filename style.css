@@ -517,3 +517,78 @@ main { max-width: 720px; margin: 0 auto; padding: 0 12px; }
 }
 
 .footer-credit{font-size:12px;opacity:.75;margin-top:4px}
+
+/* 声を選ぶ（デモ②せってい） */
+.note-small {
+  font-size: 0.8rem;
+  color: #777;
+  margin: 6px 0 0;
+}
+
+/* デモ①：くらべるモード */
+.compare-area {
+  background: #f7f7f7;
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  margin-top: 12px;
+}
+.compare-hint { font-weight: 700; margin: 4px 0 10px; }
+.compare-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.compare-check-item {
+  background: #fff;
+  border: 2px solid #ccc;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+.compare-check-item input { width: 20px; height: 20px; }
+.compare-result { margin-top: 12px; }
+.compare-row { margin-bottom: 14px; }
+.compare-row-label {
+  font-weight: 800;
+  color: var(--color-see-dark);
+  margin-bottom: 4px;
+}
+.compare-row-canvas {
+  width: 100%;
+  max-width: 100%;
+  background: #000;
+  border-radius: 8px;
+}
+
+/* あいづちくん：ストリップ・感度 */
+.strip-canvas {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  margin-top: 8px;
+  touch-action: none;
+}
+
+/* へんじの はやさ：タイムライン */
+.speed-timelines { margin-top: 16px; }
+.timeline-block { margin-bottom: 14px; }
+.timeline-label {
+  font-weight: 800;
+  color: var(--color-speed-dark);
+  margin: 0 0 4px;
+}
+.timeline-block canvas {
+  width: 100%;
+  max-width: 100%;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}

@@ -1,4 +1,4 @@
-/* demo4.js — ④「へんじの はやさ じっけん」 */
+/* demo4.js — ④「へんじの はやさ じっけん」（vad.js / strip.js を利用） */
 (function (global) {
   'use strict';
   const KoeLab = global.KoeLab;
@@ -9,19 +9,22 @@
     { text: 'すきな たべものは なに？', audio: 'audio/q2.wav' },
     { text: 'さいきん うれしかったことは？', audio: 'audio/q3.wav' }
   ];
-  const MIN_THRESHOLD = 0.02;
-  const CALIBRATE_MS = 1500;
-  const SPEECH_MIN_MS = 500;
-  const SILENCE_MS = 300;
   const FAST_MS = 200;
-  const SLOW_MS = 1500;
+  const SLOW_MS = 3000;
+  const SPEECH_TIMEOUT_MS = 8000; // これだけ発話が検出できなければ案内を出す
 
   const Demo4 = {
     running: false,
     analyser: null,
     source: null,
-    timeData: null,
-    rafId: null
+    vad: null,
+    vadStartTime: 0,
+    speechEndWaiters: [],
+    currentRoundFrames: [],
+    recording: false,
+    lastOrder: null,
+    roundsData: [null, null],
+    debugSource: null
   };
 
   function $(id) { return document.getElementById(id); }
@@ -32,100 +35,97 @@
     if (el) el.textContent = text || '';
   }
 
-  // speechSynthesis を Promise で待てるようにする
-  function speakAndWait(text) {
-    return new Promise(function (resolve) {
-      if (!('speechSynthesis' in window)) { resolve(); return; }
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'ja-JP';
-      const voices = window.speechSynthesis.getVoices();
-      const jaVoice = voices.find(function (v) { return v.lang === 'ja-JP'; });
-      if (jaVoice) utter.voice = jaVoice;
-      utter.onend = resolve;
-      utter.onerror = resolve;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utter);
-      // フォールバック：onendが発火しない端末対策
-      setTimeout(resolve, Math.max(2000, text.length * 300));
-    });
-  }
+  function vadNow() { return performance.now() - Demo4.vadStartTime; }
 
-  function setupAnalyser() {
-    return KoeLab.getMicStream().then(function (stream) {
-      const audioCtx = KoeLab.getAudioContext();
-      if (!Demo4.analyser) {
-        Demo4.analyser = audioCtx.createAnalyser();
-        Demo4.analyser.fftSize = 2048;
-        Demo4.analyser.smoothingTimeConstant = 0.2;
-        Demo4.timeData = new Uint8Array(Demo4.analyser.fftSize);
-      }
-      if (!Demo4.source) {
-        Demo4.source = audioCtx.createMediaStreamSource(stream);
-        Demo4.source.connect(Demo4.analyser);
-      }
-      return Demo4.analyser;
-    });
-  }
-
-  // ノイズ床を測る
-  function calibrateNoise(analyser) {
-    return new Promise(function (resolve) {
-      const samples = [];
-      const startTime = performance.now();
-      function tick() {
-        analyser.getByteTimeDomainData(Demo4.timeData);
-        samples.push(KoeLab.computeRMS(Demo4.timeData));
-        updateLevelBar();
-        if (performance.now() - startTime >= CALIBRATE_MS) {
-          const avg = samples.reduce(function (a, b) { return a + b; }, 0) / Math.max(1, samples.length);
-          resolve(Math.max(avg * 3, MIN_THRESHOLD));
-        } else {
-          requestAnimationFrame(tick);
-        }
-      }
-      tick();
-    });
-  }
-
-  function updateLevelBar() {
+  function updateLevelBarFrame(f) {
     const bar = $('speedLevelBar');
-    if (!bar || !Demo4.timeData) return;
-    const rms = KoeLab.computeRMS(Demo4.timeData);
-    bar.style.width = Math.min(100, Math.round(rms * 220)) + '%';
+    if (bar) bar.style.width = Math.min(100, Math.round(f.rms * 220)) + '%';
   }
 
-  // 発話が始まって終わるまで待つ
-  function waitForSpeechEnd(analyser, threshold) {
-    return new Promise(function (resolve) {
-      let speaking = false;
-      let speechStart = 0;
-      let silenceStart = 0;
-      function tick() {
-        analyser.getByteTimeDomainData(Demo4.timeData);
-        const rms = KoeLab.computeRMS(Demo4.timeData);
-        updateLevelBar();
-        const now = performance.now();
-        if (rms > threshold) {
-          silenceStart = 0;
-          if (!speechStart) speechStart = now;
-          if (!speaking && now - speechStart >= SPEECH_MIN_MS) speaking = true;
-        } else if (speaking) {
-          if (!silenceStart) silenceStart = now;
-          if (now - silenceStart >= SILENCE_MS) {
-            resolve();
-            return;
-          }
-        }
-        Demo4.rafId = requestAnimationFrame(tick);
+  function setupVad() {
+    Demo4.vad = KoeLab.createVAD(Demo4.analyser, {
+      onSpeechStart: function () {
+        if (KoeLab.isDebugMode()) setStage('（デバッグ）speech START');
+      },
+      onSpeechEnd: function (t, durMs, hangoverMs) {
+        if (KoeLab.isDebugMode()) setStage('（デバッグ）speech END ' + Math.round(durMs) + 'ms');
+        if (durMs < 300) return; // 短い物音は無視して待ち続ける
+        const waiter = Demo4.speechEndWaiters.shift();
+        if (waiter) waiter.resolve({ t: t, durMs: durMs, hangoverMs: hangoverMs });
+      },
+      onFrame: function (f) {
+        updateLevelBarFrame(f);
+        if (Demo4.recording) Demo4.currentRoundFrames.push(f);
       }
-      tick();
+    });
+    Demo4.vadStartTime = performance.now();
+    Demo4.vad.start();
+  }
+
+  // analyser・vad を用意する（マイクの有無に関係なく呼べる：デバッグ用に必須）
+  function ensureAnalyserAndVad() {
+    const audioCtx = KoeLab.getAudioContext();
+    if (!Demo4.analyser) {
+      Demo4.analyser = audioCtx.createAnalyser();
+      Demo4.analyser.fftSize = 1024;
+      Demo4.analyser.smoothingTimeConstant = 0;
+    }
+    if (!Demo4.vad) {
+      setupVad();
+    } else {
+      Demo4.vad.recalibrate(500);
+    }
+    return Demo4.analyser;
+  }
+
+  function setupAnalyserAndVad() {
+    return KoeLab.getMicStream().then(function (stream) {
+      const analyser = ensureAnalyserAndVad();
+      if (!Demo4.source) {
+        const audioCtx = KoeLab.getAudioContext();
+        Demo4.source = audioCtx.createMediaStreamSource(stream);
+        Demo4.source.connect(analyser);
+      }
+      setStage('しずかな音を はかっているよ…');
+      return waitCalibration();
     });
   }
 
-  async function respondWithDelay(delayMs) {
-    await new Promise(function (r) { setTimeout(r, delayMs); });
-    setStage('へえ！ そうなんだ！');
-    await KoeLab.playAudioOrSpeak('audio/hee_sounanda.wav', 'へえ！ そうなんだ！', 'ja-JP');
+  function waitCalibration() {
+    return new Promise(function (resolve) {
+      const iv = setInterval(function () {
+        if (!Demo4.vad || !Demo4.vad.isCalibrating()) {
+          clearInterval(iv);
+          resolve();
+        }
+      }, 50);
+    });
+  }
+
+  function waitForSpeechEnd(timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      const waiter = { resolve: null };
+      const timer = setTimeout(function () {
+        const idx = Demo4.speechEndWaiters.indexOf(waiter);
+        if (idx >= 0) Demo4.speechEndWaiters.splice(idx, 1);
+        reject(new Error('TIMEOUT'));
+      }, timeoutMs);
+      waiter.resolve = function (v) {
+        clearTimeout(timer);
+        resolve(v);
+      };
+      Demo4.speechEndWaiters.push(waiter);
+    });
+  }
+
+  // 再生中〜再生後300msは vad の判定を止める（スピーカー音の拾い込み対策）
+  async function playTrackedAudio(path, fallbackText, label, color) {
+    if (Demo4.vad) Demo4.vad.mute(30000);
+    const start = vadNow();
+    await KoeLab.playAudioOrSpeak(path, fallbackText, 'ja-JP');
+    const end = vadNow();
+    if (Demo4.vad) Demo4.vad.mute(300);
+    return { start: start, end: end, label: label, color: color };
   }
 
   function updateVoteBars() {
@@ -140,42 +140,110 @@
     return stats;
   }
 
+  async function runRound(question, delayMs, roundIndex) {
+    Demo4.currentRoundFrames = [];
+    Demo4.recording = true;
+    const roundStartT = vadNow();
+
+    setStage((roundIndex + 1) + 'かいめ：「' + question.text + '」');
+    const qBlock = await playTrackedAudio(question.audio, question.text, 'しつもん', '#43a047');
+
+    setStage('こたえてね！');
+    if (Demo4.debugNoMic) {
+      setTimeout(function () {
+        if (Demo4.debugSource) Demo4.debugSource.stop();
+        Demo4.debugSource = KoeLab.debugAudioSource('audio/q3.wav');
+        Demo4.debugSource.play(Demo4.analyser);
+      }, 500);
+    }
+    let speechEndInfo;
+    try {
+      speechEndInfo = await waitForSpeechEnd(SPEECH_TIMEOUT_MS);
+    } finally {
+      // タイムアウトでも記録は止める
+    }
+
+    const hang = (speechEndInfo && speechEndInfo.hangoverMs) || 0;
+    await new Promise(function (r) { setTimeout(r, Math.max(0, delayMs - hang)); });
+    const isFast = delayMs === FAST_MS;
+    setStage('へえ！ そうなんだ！');
+    const replyBlock = await playTrackedAudio(
+      'audio/hee_sounanda.wav', 'へえ！ そうなんだ！', 'へんじ', isFast ? '#2196f3' : '#ff9800'
+    );
+
+    Demo4.recording = false;
+    const roundEndT = vadNow();
+
+    Demo4.roundsData[roundIndex] = {
+      startT: roundStartT,
+      endT: roundEndT,
+      userFrames: Demo4.currentRoundFrames.slice(),
+      sysBlocks: [qBlock, replyBlock],
+      speechEndT: speechEndInfo.t,
+      replyStartT: replyBlock.start,
+      delayLabel: '間 ' + (delayMs / 1000).toFixed(1) + '秒',
+      delayColor: isFast ? '#2196f3' : '#ff9800'
+    };
+
+    await new Promise(function (r) { setTimeout(r, 400); });
+  }
+
   async function runExperiment() {
+    KoeLab.preloadWavs(['audio/q1.wav','audio/q2.wav','audio/q3.wav','audio/hee_sounanda.wav']);
     if (Demo4.running) return;
     Demo4.running = true;
     $('speedStartBtn').disabled = true;
     $('speedVoteArea').hidden = true;
+    $('speedTimelines').hidden = true;
     $('speedReveal').textContent = '';
 
     try {
-      const analyser = await setupAnalyser();
+      if (Demo4.debugNoMic) {
+        ensureAnalyserAndVad();
+        setStage('（デバッグ）しずかな音を はかっているよ…');
+        await waitCalibration();
+      } else {
+        await setupAnalyserAndVad();
+      }
       // iOS対策：タップの中で音声合成に触れておく
       if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
 
-      setStage('しずかな音を はかっているよ…');
-      const threshold = await calibrateNoise(analyser);
-
       const question = QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)];
-      const order = shuffle2(FAST_MS, SLOW_MS); // 例: [1500, 200]
+      const order = shuffle2(FAST_MS, SLOW_MS); // 例: [3000, 200]
 
       for (let round = 0; round < 2; round++) {
-        setStage((round + 1) + 'かいめ：「' + question.text + '」');
-        await KoeLab.playAudioOrSpeak(question.audio, question.text, 'ja-JP');
-        setStage('こたえてね！');
-        await waitForSpeechEnd(analyser, threshold);
-        await respondWithDelay(order[round]);
-        await new Promise(function (r) { setTimeout(r, 400); });
+        await runRound(question, order[round], round);
       }
 
       setStage('じっけん おわり！');
       Demo4.lastOrder = order; // [1かいめの遅延, 2かいめの遅延]
       $('speedVoteArea').hidden = false;
     } catch (err) {
-      setStage(KoeLab.micErrorMessage(err));
+      if (err && err.message === 'TIMEOUT') {
+        setStage('声が 聞こえなかったよ．感度を 上げて もう一回 ためしてね．');
+      } else {
+        setStage(KoeLab.micErrorMessage(err));
+      }
     } finally {
       Demo4.running = false;
       $('speedStartBtn').disabled = false;
     }
+  }
+
+  function renderTimelines() {
+    const d1 = Demo4.roundsData[0];
+    const d2 = Demo4.roundsData[1];
+    const c1 = $('speedTimeline1');
+    const c2 = $('speedTimeline2');
+    const l1 = $('speedTimeline1Label');
+    const l2 = $('speedTimeline2Label');
+    if (!d1 || !d2 || !c1 || !c2 || !Demo4.lastOrder) return;
+    const order = Demo4.lastOrder;
+    l1.textContent = '1かいめ（' + (order[0] === FAST_MS ? 'はやい 0.2秒' : 'おそい 3.0秒') + '）';
+    l2.textContent = '2かいめ（' + (order[1] === FAST_MS ? 'はやい 0.2秒' : 'おそい 3.0秒') + '）';
+    KoeLab.drawStaticTimeline(c1, d1);
+    KoeLab.drawStaticTimeline(c2, d2);
+    $('speedTimelines').hidden = false;
   }
 
   function vote(roundIndex) {
@@ -190,13 +258,30 @@
     updateVoteBars();
 
     const revealText = (roundIndex === 0 ? '1かいめ' : '2かいめ') + 'は「' +
-      (isFast ? '速い（0.2秒）' : '遅い（1.5秒）') + '」だったよ！';
+      (isFast ? '速い（0.2秒）' : '遅い（3.0秒）') + '」だったよ！';
     $('speedReveal').textContent = revealText;
+
+    renderTimelines();
   }
 
   function resetVotes() {
     KoeLab.storage.set('speedVoteStats', { fast: 0, slow: 0 });
     updateVoteBars();
+  }
+
+  function initDebugButton() {
+    if (!KoeLab.isDebugMode()) return;
+    const btnRow = document.querySelector('#panel-speed .btn-row');
+    if (!btnRow) return;
+    const btn = document.createElement('button');
+    btn.className = 'big-btn btn-secondary';
+    btn.textContent = '🧪 テスト音源で再生（audio/q3.wav）';
+    btnRow.appendChild(btn);
+    btn.addEventListener('click', function () {
+      // マイクを使わず，「答え」の代わりに q3.wav を流して実験を最後まで通す
+      Demo4.debugNoMic = true;
+      runExperiment();
+    });
   }
 
   function init() {
@@ -212,13 +297,13 @@
     if (resetBtn) resetBtn.addEventListener('click', resetVotes);
 
     updateVoteBars();
+    initDebugButton();
   }
 
   function stop() {
-    if (Demo4.rafId) cancelAnimationFrame(Demo4.rafId);
-    Demo4.rafId = null;
+    if (Demo4.vad) Demo4.vad.stop();
     Demo4.running = false;
   }
 
-  KoeLab.Demo4 = { init: init, start: function () {}, stop: stop };
+  KoeLab.Demo4 = { init: init, start: function () {}, stop: stop, _d: Demo4 };
 })(window);

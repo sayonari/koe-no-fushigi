@@ -9,7 +9,68 @@
     interimEl: null
   };
 
+  // 声を選ぶセレクトに出す言語一覧（AI翻訳の対象言語＋日本語）
+  const VOICE_LANGS = [
+    { value: 'ja-JP', label: '日本語' },
+    { value: 'en-US', label: '英語' },
+    { value: 'zh-CN', label: '中国語' },
+    { value: 'ko-KR', label: '韓国語' },
+    { value: 'es-ES', label: 'スペイン語' },
+    { value: 'fr-FR', label: 'フランス語' }
+  ];
+
   function $(id) { return document.getElementById(id); }
+
+  // 言語コード（'en' 等）から VOICE_LANGS の詳細ロケールへ
+  function toDetailedLang(lang) {
+    const found = VOICE_LANGS.find(function (v) { return v.value.indexOf(lang) === 0; });
+    return found ? found.value : (lang.indexOf('-') >= 0 ? lang : lang + '-' + lang.toUpperCase());
+  }
+
+  function savedVoiceURI(lang) {
+    const map = KoeLab.storage.get('aiVoiceMap', {});
+    return map[lang];
+  }
+  function saveVoiceURI(lang, uri) {
+    const map = KoeLab.storage.get('aiVoiceMap', {});
+    map[lang] = uri;
+    KoeLab.storage.set('aiVoiceMap', map);
+  }
+
+  function populateVoiceSelect() {
+    const langSel = $('aiVoiceLangSelect');
+    const voiceSel = $('aiVoiceSelect');
+    if (!langSel || !voiceSel) return;
+    const lang = toDetailedLang(langSel.value);
+    const voices = KoeLab.listVoices(lang);
+    voiceSel.innerHTML = '';
+    if (!voices.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '（この端末には声が見つからないよ）';
+      voiceSel.appendChild(opt);
+      return;
+    }
+    const saved = savedVoiceURI(lang);
+    voices.forEach(function (v) {
+      const opt = document.createElement('option');
+      opt.value = v.voiceURI;
+      opt.textContent = v.name + '（' + v.lang + '）';
+      voiceSel.appendChild(opt);
+    });
+    if (saved && voices.some(function (v) { return v.voiceURI === saved; })) {
+      voiceSel.value = saved;
+    } else {
+      voiceSel.value = voices[0].voiceURI; // pickVoice の結果と一致
+    }
+  }
+
+  function currentVoiceURI(lang) {
+    const detailed = toDetailedLang(lang);
+    const saved = savedVoiceURI(detailed);
+    if (saved) return saved;
+    return null; // KoeLab.speak 側で pickVoice に任せる
+  }
 
   function setStatus(msg) {
     const el = $('aiStatus');
@@ -123,12 +184,12 @@
 
     speakBtn.hidden = false;
     speakBtn.addEventListener('click', function () {
-      KoeLab.speak(speakText, speakLang);
+      KoeLab.speakLong(speakText, speakLang, { voiceURI: currentVoiceURI(speakLang) });
     });
 
     const autoSpeak = $('aiAutoSpeakToggle');
     if (autoSpeak && autoSpeak.checked) {
-      KoeLab.speak(speakText, speakLang);
+      KoeLab.speakLong(speakText, speakLang, { voiceURI: currentVoiceURI(speakLang) });
     }
   }
 
@@ -251,6 +312,21 @@
         if (big) big.textContent = btn.dataset.topic;
       });
     });
+
+    // 声を選ぶセレクト
+    const voiceLangSel = $('aiVoiceLangSelect');
+    const voiceSel = $('aiVoiceSelect');
+    if (voiceLangSel && voiceSel) {
+      voiceLangSel.addEventListener('change', populateVoiceSelect);
+      voiceSel.addEventListener('change', function () {
+        const lang = toDetailedLang(voiceLangSel.value);
+        saveVoiceURI(lang, voiceSel.value);
+      });
+      populateVoiceSelect();
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.addEventListener('voiceschanged', populateVoiceSelect);
+      }
+    }
 
     // メモの保存・復元
     const memo = $('aiMemoInput');

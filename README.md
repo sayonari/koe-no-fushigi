@@ -11,18 +11,52 @@
 web/
 ├── index.html      … ページ本体（4つのデモをタブで切替）
 ├── style.css        … デザイン
-├── common.js         … 共通ユーティリティ（AudioContext/マイク共有・RMS・localStorage・音声再生）
+├── common.js         … 共通ユーティリティ（AudioContext/マイク共有・RMS・localStorage・音声再生・声選び）
+├── vad.js             … 発話区間検出（VAD）共通モジュール（demo3・demo4 で共用）
+├── strip.js           … スクロール波形ストリップ／静止画タイムライン描画（demo3・demo4 で共用）
 ├── app.js            … タブ切替・せんせいモード・全体初期化
-├── demo1.js           … ①こえを みる（スペクトログラム）
-├── demo2.js           … ②AIが きいて・やくして・はなす（音声認識＋翻訳＋読み上げ）
-├── demo3.js           … ③あいづちくん と はなす（RMSによる発話区間検出＋相槌）
-├── demo4.js           … ④へんじの はやさ じっけん（応答速度の比較投票）
+├── demo1.js           … ①こえを みる（スペクトログラム，お題ごとに保存・くらべるモード）
+├── demo2.js           … ②AIが きいて・やくして・はなす（音声認識＋翻訳＋読み上げ・声選び）
+├── demo3.js           … ③あいづちくん と はなす（vad.js による発話区間検出＋相槌＋ストリップ表示）
+├── demo4.js           … ④へんじの はやさ じっけん（0.2秒 vs 3.0秒の比較投票＋2段タイムライン）
 ├── img/
 │   ├── hero.jpg       … ヒーロー写真
 │   └── qr.png         … サイトQRコード
 ├── audio/             … 相槌・応答用 wav（下記一覧，無ければ speechSynthesis に自動フォールバック）
 └── README.md
 ```
+
+## vad.js（発話区間検出）
+
+固定しきい値ではなく，**適応ノイズ床＋ヒステリシス**で「話している／いない」を判定する．
+スマホのように環境ノイズが変動する場面でも，声を拾いやすくするための実装．
+
+- 20ms ごとに 300〜3400Hz 帯のエネルギー（`level`，dB相当）と RMS を計測
+- ノイズ床 `noise` は指数移動平均：非発話中は速く（0.05），発話中はほぼ動かさない（0.002）で追従
+- 開始後 0.5 秒は初期ノイズ床の計測にあて，判定しない
+- `level > noise + onMargin`（既定9dB）が 60ms 続いたら発話ON，
+  `level < noise + offMargin`（既定4dB）が 200ms（hangover）続いたら発話OFFにして，
+  語中の短い切れ目でON/OFFがバタつかないようにしている
+- 使い方：`const vad = KoeLab.createVAD(analyser, { onMargin, onSpeechStart, onSpeechEnd, onFrame, onLongSpeech })`
+  → `vad.start()` / `vad.stop()` / `vad.mute(ms)`（自分の再生音を拾わないよう一時停止）/
+  `vad.recalibrate(ms)`（ノイズ床を再計測）/ `vad.setOnMargin(v)`（感度スライダ用）
+
+## strip.js（波形ストリップ）
+
+- `KoeLab.createStrip(canvas, opts)`：右から左へ流れる直近8秒のライブ表示．
+  RMS包絡・発話中の帯・あいづちマーカー・（「くわしく」トグル時のみ）しきい値線を描画（demo3で使用）
+- `KoeLab.drawStaticTimeline(canvas, data)`：demo4 の「1回目・2回目」比較用の静止画タイムライン．
+  ユーザの発話帯とAIの再生ブロック，発話終わり→返事はじまりの両矢印＋「間 n秒」ラベルを描く
+
+## ?debug=1（マイク無しでの動作確認）
+
+URL に `?debug=1` を付けると，デモ③・デモ④の「話しかける」「スタート」ボタンの隣に
+**「🧪 テスト音源で再生（audio/q3.wav）」ボタン**が出る．押すと `KoeLab.debugAudioSource()` で
+`audio/q3.wav` を `<audio>` → `createMediaElementSource` 経由で analyser に直結し，
+マイク権限・実機マイクが無くても vad.js の `onSpeechStart`／`onSpeechEnd` の発火や
+相槌再生の経路を確認できる（開発者向け）．
+
+例：`http://localhost:8766/index.html?debug=1#aizuchi`
 
 ## audio/ に置く wav ファイル一覧（VOICEVOX等で生成）
 

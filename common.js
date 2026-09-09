@@ -109,54 +109,152 @@
     }
   };
 
+  // ---- 声（Voice）を品質順で選ぶ ----
+  // 優先順：(1) Google (2) Natural/Neural/Online/Premium/Enhanced
+  //         (3) macOS高品質声 (4) クラウド声 (5) それ以外／compactは最後
+  function scoreVoice(v) {
+    const name = v.name || '';
+    if (/compact/i.test(name)) return -1000;
+    let score = 0;
+    if (/Google/.test(name)) score += 100;
+    if (/Natural|Neural|Online|Premium|Enhanced/i.test(name)) score += 80;
+    if (/Samantha|Alex|Daniel|Karen|Kyoko|Otoya/.test(name)) score += 60;
+    if (!v.localService) score += 20;
+    return score;
+  }
+
+  KoeLab.pickVoice = function (lang) {
+    if (!('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+    const short = (lang || 'ja-JP').split('-')[0];
+    let candidates = voices.filter(function (v) { return v.lang === lang; });
+    if (!candidates.length) {
+      candidates = voices.filter(function (v) { return v.lang && v.lang.indexOf(short) === 0; });
+    }
+    if (!candidates.length) return null;
+    candidates.sort(function (a, b) { return scoreVoice(b) - scoreVoice(a); });
+    return candidates[0];
+  };
+
+  // 言語ごとの声の候補一覧（品質順）。UI のセレクトに使う
+  KoeLab.listVoices = function (lang) {
+    if (!('speechSynthesis' in window)) return [];
+    const voices = window.speechSynthesis.getVoices() || [];
+    const short = (lang || 'ja-JP').split('-')[0];
+    const candidates = voices.filter(function (v) { return v.lang && v.lang.indexOf(short) === 0; });
+    candidates.sort(function (a, b) { return scoreVoice(b) - scoreVoice(a); });
+    return candidates;
+  };
+
+  function resolveVoice(utterLang, voiceURI) {
+    if (voiceURI && 'speechSynthesis' in window) {
+      const voices = window.speechSynthesis.getVoices() || [];
+      const match = voices.find(function (v) { return v.voiceURI === voiceURI; });
+      if (match) return match;
+    }
+    return KoeLab.pickVoice(utterLang);
+  }
+
   // ---- speechSynthesis 共通ヘルパー ----
   KoeLab.speak = function (text, lang, opts) {
     if (!('speechSynthesis' in window)) return false;
     opts = opts || {};
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = lang || 'ja-JP';
-    if (opts.rate) utter.rate = opts.rate;
-    if (opts.pitch) utter.pitch = opts.pitch;
+    utter.rate = opts.rate || 0.95;
+    utter.pitch = opts.pitch != null ? opts.pitch : 1.0;
 
-    // 指定した言語に近い声があれば選ぶ
-    const voices = window.speechSynthesis.getVoices();
-    if (voices && voices.length) {
-      const match = voices.find(function (v) { return v.lang === utter.lang; }) ||
-                    voices.find(function (v) { return v.lang && v.lang.indexOf(utter.lang.split('-')[0]) === 0; });
-      if (match) utter.voice = match;
-    }
+    const voice = resolveVoice(utter.lang, opts.voiceURI);
+    if (voice) utter.voice = voice;
     window.speechSynthesis.cancel(); // 前の読み上げが残っていたら止める
     window.speechSynthesis.speak(utter);
     return true;
   };
 
-  // 音声再生：wav があれば再生，無ければ speechSynthesis にフォールバック
-  KoeLab.playAudioOrSpeak = function (audioPath, fallbackText, fallbackLang) {
+  // 長い文を文末（。．.！!？?）で分割して連続再生する
+  function splitSentences(text) {
+    const parts = [];
+    let buf = '';
+    for (const ch of text) {
+      buf += ch;
+      if (/[。．.！!？?]/.test(ch)) { parts.push(buf); buf = ''; }
+    }
+    if (buf.trim()) parts.push(buf);
+    return parts.map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  KoeLab.speakLong = function (text, lang, opts) {
+    opts = opts || {};
     return new Promise(function (resolve) {
-      const audio = new Audio(audioPath);
-      let done = false;
-      const finish = function () {
-        if (done) return;
-        done = true;
-        resolve();
-      };
-      audio.addEventListener('ended', finish);
-      audio.addEventListener('error', function () {
-        if (done) return;
-        done = true;
-        KoeLab.speak(fallbackText, fallbackLang || 'ja-JP');
-        // speechSynthesis は非同期に終わるが，ここでは体感上すぐ次に進めてよい
-        setTimeout(resolve, 600);
-      });
-      const p = audio.play();
-      if (p && p.catch) {
-        p.catch(function () {
-          if (done) return;
-          done = true;
-          KoeLab.speak(fallbackText, fallbackLang || 'ja-JP');
-          setTimeout(resolve, 600);
-        });
+      if (!('speechSynthesis' in window) || !text) { resolve(); return; }
+      const parts = splitSentences(text);
+      if (!parts.length) { resolve(); return; }
+      window.speechSynthesis.cancel();
+      let i = 0;
+      function next() {
+        if (i >= parts.length) { resolve(); return; }
+        const utter = new SpeechSynthesisUtterance(parts[i]);
+        utter.lang = lang || 'ja-JP';
+        utter.rate = opts.rate || 0.95;
+        utter.pitch = opts.pitch != null ? opts.pitch : 1.0;
+        const voice = resolveVoice(utter.lang, opts.voiceURI);
+        if (voice) utter.voice = voice;
+        utter.onend = function () { i++; next(); };
+        utter.onerror = function () { i++; next(); };
+        window.speechSynthesis.speak(utter);
       }
+      next();
+    });
+  };
+
+  // 音声再生：wav があれば再生，無ければ speechSynthesis にフォールバック
+  // ---- wav の再生は Web Audio（fetch + decodeAudioData + BufferSource）で行う ----
+  // <audio> 要素はブラウザ/環境によって読み込みが止まることがあり，タイミングも不正確なため
+  const wavCache = {};
+  KoeLab.loadWav = function (path) {
+    if (!wavCache[path]) {
+      wavCache[path] = fetch(path).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.arrayBuffer();
+      }).then(function (buf) {
+        const ctx = KoeLab.getAudioContext();
+        return new Promise(function (resolve, reject) {
+          // Safari 旧版はコールバック形式のみ
+          const p = ctx.decodeAudioData(buf, resolve, reject);
+          if (p && p.then) p.then(resolve, reject);
+        });
+      });
+      wavCache[path].catch(function () { delete wavCache[path]; });
+    }
+    return wavCache[path];
+  };
+  KoeLab.preloadWavs = function (paths) {
+    paths.forEach(function (p) { KoeLab.loadWav(p).catch(function () {}); });
+  };
+  // 再生．戻り値：{ ended: Promise, duration, startedAt(performance.now基準), source }
+  KoeLab.playWav = function (path, opts) {
+    opts = opts || {};
+    const ctx = KoeLab.getAudioContext();
+    return KoeLab.loadWav(path).then(function (buffer) {
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      if (opts.connectTo) src.connect(opts.connectTo);
+      const ended = new Promise(function (resolve) { src.onended = resolve; });
+      const startedAt = performance.now();
+      src.start();
+      return { ended: ended, duration: buffer.duration * 1000, startedAt: startedAt, source: src };
+    });
+  };
+
+  // wav があれば再生，無ければ speechSynthesis にフォールバック．終了時に resolve
+  KoeLab.playAudioOrSpeak = function (audioPath, fallbackText, fallbackLang) {
+    return KoeLab.playWav(audioPath).then(function (h) {
+      return h.ended;
+    }).catch(function () {
+      KoeLab.speak(fallbackText, fallbackLang || 'ja-JP');
+      return new Promise(function (resolve) { setTimeout(resolve, 600); });
     });
   };
 

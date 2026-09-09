@@ -55,7 +55,7 @@
     </div>
     <div id="seeTopicBig" class="topic-big" aria-live="polite"></div>
 
-    <div class="spec-wrap">
+    <div class="spec-wrap" id="seeLiveWrap">
       <div class="spec-axis-y">
         <span>高い ↑</span>
         <span>8000</span>
@@ -66,9 +66,9 @@
       </div>
       <canvas id="specCanvas" width="640" height="320"></canvas>
     </div>
-    <div class="spec-axis-x">時間 →</div>
+    <div class="spec-axis-x" id="seeLiveAxisX">時間 →</div>
 
-    <div class="meter-row">
+    <div class="meter-row" id="seeLiveMeters">
       <div class="meter-box">
         <span class="meter-label">いまの大きさ</span>
         <div class="meter-bar-bg"><div class="meter-bar-fg" id="seeLevelBar"></div></div>
@@ -79,11 +79,23 @@
       </div>
     </div>
 
-    <div class="btn-row">
+    <div class="btn-row" id="seeLiveBtns">
       <button class="big-btn btn-primary" id="seeStartBtn">▶ 始める</button>
       <button class="big-btn btn-secondary" id="seeStopBtn">⏸ 止める</button>
       <button class="big-btn btn-secondary" id="seeSaveBtn">📷 残す（画像を保存）</button>
       <button class="big-btn btn-secondary" id="seeColorBtn">🎨 色を変える</button>
+      <button class="big-btn btn-secondary" id="seeClearBtn">🗑 このお題を消す</button>
+      <button class="big-btn btn-secondary" id="seeCompareBtn">🔍 くらべる</button>
+    </div>
+
+    <div id="seeCompareArea" class="compare-area" hidden>
+      <p class="compare-hint">くらべたい お題を 2〜4こ えらんでね（録ったお題だけ えらべるよ）</p>
+      <div id="seeCompareChecks" class="compare-checks"></div>
+      <div class="btn-row">
+        <button class="big-btn btn-primary" id="seeCompareShowBtn">くらべて 見る</button>
+        <button class="big-btn btn-secondary" id="seeCompareBackBtn">← もどる</button>
+      </div>
+      <div id="seeCompareResult" class="compare-result"></div>
     </div>
 
     <div id="seeStatus" class="status-msg" aria-live="polite"></div>
@@ -134,6 +146,26 @@
 
     <div id="aiResultList" class="ai-result-list" aria-live="polite"></div>
 
+    <details class="hint-box">
+      <summary>⚙️ 声を選ぶ（せってい）</summary>
+      <div class="lang-row">
+        <label for="aiVoiceLangSelect">言語：</label>
+        <select id="aiVoiceLangSelect">
+          <option value="ja">日本語</option>
+          <option value="en">英語</option>
+          <option value="zh">中国語</option>
+          <option value="ko">韓国語</option>
+          <option value="es">スペイン語</option>
+          <option value="fr">フランス語</option>
+        </select>
+      </div>
+      <div class="lang-row">
+        <label for="aiVoiceSelect">声：</label>
+        <select id="aiVoiceSelect"></select>
+      </div>
+      <p class="note-small">声の質は 機種やブラウザによって かわります．</p>
+    </details>
+
     <div id="aiStatus" class="status-msg" aria-live="polite"></div>
     <div id="aiUnsupported" class="unsupported-msg" hidden>
       このブラウザでは 音声にんしきが つかえないよ．<br>
@@ -166,6 +198,8 @@
       <div id="aizuchiBubble" class="aizuchi-bubble" aria-live="polite"></div>
     </div>
 
+    <div id="aizuchiStateBig" class="topic-big" aria-live="polite"></div>
+
     <div class="card-scroll" id="aizuchiTopicCards">
       <button class="topic-card" data-topic="昨日 楽しかったこと">昨日 楽しかったこと</button>
       <button class="topic-card" data-topic="好きな遊び">好きな遊び</button>
@@ -180,18 +214,32 @@
       </div>
     </div>
 
+    <canvas id="aizuchiStripCanvas" class="strip-canvas" width="640" height="120"></canvas>
+    <label class="switch-label">
+      <input type="checkbox" id="aizuchiDetailToggle">
+      くわしく（しきい線を見る）
+    </label>
+
     <div class="btn-row">
       <button class="big-btn btn-primary" id="aizuchiStartBtn">▶ 話しかける</button>
       <button class="big-btn btn-secondary" id="aizuchiStopBtn">⏹ やめる</button>
     </div>
 
     <div class="speed-preset-row">
+      <span>感度：</span>
+      <input type="range" id="aizuchiSensSlider" min="5" max="15" step="1" value="9">
+      <span id="aizuchiSensValue">9 dB</span>
+      <button class="big-btn btn-secondary" id="aizuchiCalibBtn">🔧 静かにして計測</button>
+    </div>
+
+    <div class="speed-preset-row">
       <span>返事の速さ：</span>
-      <button class="preset-btn" data-delay="200">速い 0.2秒</button>
-      <button class="preset-btn" data-delay="500">普通 0.5秒</button>
-      <button class="preset-btn" data-delay="1500">遅い 1.5秒</button>
-      <input type="range" id="aizuchiDelaySlider" min="0" max="2000" step="50" value="500">
-      <span id="aizuchiDelayValue">500 ms</span>
+      <button class="preset-btn" data-delay="200">はやい 0.2秒</button>
+      <button class="preset-btn" data-delay="400">ふつう 0.4秒</button>
+      <button class="preset-btn" data-delay="1500">おそい 1.5秒</button>
+      <button class="preset-btn" data-delay="3000">とてもおそい 3秒</button>
+      <input type="range" id="aizuchiDelaySlider" min="0" max="3000" step="50" value="400">
+      <span id="aizuchiDelayValue">400 ms</span>
     </div>
 
     <label class="switch-label">
@@ -227,6 +275,16 @@
         <button class="big-btn btn-primary" id="speedVoteBBtn">2かいめ</button>
       </div>
       <p id="speedReveal" class="speed-reveal"></p>
+      <div id="speedTimelines" class="speed-timelines" hidden>
+        <div class="timeline-block">
+          <p class="timeline-label" id="speedTimeline1Label">1かいめ</p>
+          <canvas id="speedTimeline1" width="640" height="160"></canvas>
+        </div>
+        <div class="timeline-block">
+          <p class="timeline-label" id="speedTimeline2Label">2かいめ</p>
+          <canvas id="speedTimeline2" width="640" height="160"></canvas>
+        </div>
+      </div>
     </div>
 
     <div class="vote-result-box">
@@ -277,6 +335,8 @@
 </footer>
 
 <script src="common.js"></script>
+<script src="vad.js"></script>
+<script src="strip.js"></script>
 <script src="demo1.js"></script>
 <script src="demo2.js"></script>
 <script src="demo3.js"></script>
