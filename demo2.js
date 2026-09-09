@@ -158,6 +158,8 @@
   }
 
   async function handleFinalResult(text) {
+    // 自動読み上げ中にスピーカーの声をマイクが拾って再認識するループを防ぐ
+    if ('speechSynthesis' in window && window.speechSynthesis.speaking) return;
     const card = addResultCard(text);
     if (!card) return;
     const translationEl = card.querySelector('.ai-result-translation');
