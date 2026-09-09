@@ -190,7 +190,7 @@
     updateVoteBars();
 
     const revealText = (roundIndex === 0 ? '1かいめ' : '2かいめ') + 'は「' +
-      (isFast ? 'はやい（0.2秒）' : 'おそい（1.5秒）') + '」だったよ！';
+      (isFast ? '速い（0.2秒）' : '遅い（1.5秒）') + '」だったよ！';
     $('speedReveal').textContent = revealText;
   }
 

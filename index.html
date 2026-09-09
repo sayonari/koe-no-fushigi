@@ -23,23 +23,23 @@
 <div class="sensei-mode-bar">
   <label class="sensei-toggle">
     <input type="checkbox" id="senseiModeToggle">
-    <span>🖥 せんせいモード（おおきくする）</span>
+    <span>🖥 先生モード（大きくする）</span>
   </label>
 </div>
 
 <nav class="tab-nav" id="tabNav">
-  <button class="tab-btn tab-see" data-tab="see">👀<br>こえを みる</button>
-  <button class="tab-btn tab-ai" data-tab="ai">🤖<br>AIと はなす</button>
+  <button class="tab-btn tab-see" data-tab="see">👀<br>声を見る</button>
+  <button class="tab-btn tab-ai" data-tab="ai">🤖<br>AIと話す</button>
   <button class="tab-btn tab-aizuchi" data-tab="aizuchi">😊<br>あいづちくん</button>
-  <button class="tab-btn tab-speed" data-tab="speed">⏱<br>へんじの はやさ</button>
+  <button class="tab-btn tab-speed" data-tab="speed">⏱<br>返事の速さ</button>
 </nav>
 
 <main id="main">
 
-  <!-- デモ①: こえを みる -->
+  <!-- デモ①: 声を見る -->
   <section class="demo-section theme-see" id="panel-see" data-panel="see">
-    <h2>👀 こえを みる（スペクトログラム）</h2>
-    <p class="lead">こえを だすと，どんな「形」に見えるかな？ 高い音・低い音で 形がかわるよ．</p>
+    <h2>👀 声を見る（スペクトログラム）</h2>
+    <p class="lead">声を出すと，どんな「形」に見えるかな？ 高い音・低い音で 形がかわるよ．</p>
 
     <div class="card-scroll" id="seeTopicCards">
       <button class="topic-card" data-topic="あ〜">あ〜</button>
@@ -80,10 +80,10 @@
     </div>
 
     <div class="btn-row">
-      <button class="big-btn btn-primary" id="seeStartBtn">▶ はじめる</button>
-      <button class="big-btn btn-secondary" id="seeStopBtn">⏸ とめる</button>
-      <button class="big-btn btn-secondary" id="seeSaveBtn">📷 のこす（画像を保存）</button>
-      <button class="big-btn btn-secondary" id="seeColorBtn">🎨 いろを かえる</button>
+      <button class="big-btn btn-primary" id="seeStartBtn">▶ 始める</button>
+      <button class="big-btn btn-secondary" id="seeStopBtn">⏸ 止める</button>
+      <button class="big-btn btn-secondary" id="seeSaveBtn">📷 残す（画像を保存）</button>
+      <button class="big-btn btn-secondary" id="seeColorBtn">🎨 色を変える</button>
     </div>
 
     <div id="seeStatus" class="status-msg" aria-live="polite"></div>
@@ -97,14 +97,14 @@
     </details>
   </section>
 
-  <!-- デモ②: AIと はなす -->
+  <!-- デモ②: AIと話す -->
   <section class="demo-section theme-ai" id="panel-ai" data-panel="ai">
-    <h2>🤖 AIが きいて・やくして・はなす</h2>
+    <h2>🤖 AIが 聞いて・翻訳して・話す</h2>
     <p class="lead">はなした ことばを AIが 文字にして，外国語に やくして，声に出して よんでくれるよ．</p>
 
     <div class="card-scroll" id="aiTopicCards">
-      <button class="topic-card" data-topic="すきな どうぶつ">すきな どうぶつ</button>
-      <button class="topic-card" data-topic="すきな食べもの">すきな食べもの</button>
+      <button class="topic-card" data-topic="好きな動物">好きな動物</button>
+      <button class="topic-card" data-topic="好きな食べ物">好きな食べ物</button>
       <button class="topic-card" data-topic="なまむぎ なまごめ なまたまご">なまむぎ なまごめ なまたまご</button>
       <button class="topic-card" data-topic="となりの きゃくは よく かき くう きゃくだ">となりの きゃくは よく かき くう きゃくだ</button>
       <button class="topic-card" data-topic="きょうは なにをした？">きょうは なにをした？</button>
@@ -112,7 +112,7 @@
     <div id="aiTopicBig" class="topic-big" aria-live="polite"></div>
 
     <div class="btn-row">
-      <button class="big-btn btn-primary" id="aiStartBtn">▶ はなしかける</button>
+      <button class="big-btn btn-primary" id="aiStartBtn">▶ 話しかける</button>
       <button class="big-btn btn-secondary" id="aiStopBtn">⏹ やめる</button>
     </div>
 
@@ -148,8 +148,8 @@
 
   <!-- デモ③: あいづちくん -->
   <section class="demo-section theme-aizuchi" id="panel-aizuchi" data-panel="aizuchi">
-    <h2>😊 あいづちくん と はなす</h2>
-    <p class="lead">はなしかけると，あいづちくんが「うん」「へえ」と こたえてくれるよ．</p>
+    <h2>😊 あいづちくんと話す</h2>
+    <p class="lead">話しかけると，あいづちくんが「うん」「へえ」と こたえてくれるよ．</p>
 
     <div class="aizuchi-face-wrap">
       <svg id="aizuchiFace" class="aizuchi-face" viewBox="0 0 200 200" width="200" height="200">
@@ -167,9 +167,9 @@
     </div>
 
     <div class="card-scroll" id="aizuchiTopicCards">
-      <button class="topic-card" data-topic="きのう たのしかったこと">きのう たのしかったこと</button>
-      <button class="topic-card" data-topic="すきな あそび">すきな あそび</button>
-      <button class="topic-card" data-topic="学校の きゅうしょく">学校の きゅうしょく</button>
+      <button class="topic-card" data-topic="昨日 楽しかったこと">昨日 楽しかったこと</button>
+      <button class="topic-card" data-topic="好きな遊び">好きな遊び</button>
+      <button class="topic-card" data-topic="学校の給食">学校の給食</button>
     </div>
     <div id="aizuchiTopicBig" class="topic-big" aria-live="polite"></div>
 
@@ -181,15 +181,15 @@
     </div>
 
     <div class="btn-row">
-      <button class="big-btn btn-primary" id="aizuchiStartBtn">▶ はなしかける</button>
+      <button class="big-btn btn-primary" id="aizuchiStartBtn">▶ 話しかける</button>
       <button class="big-btn btn-secondary" id="aizuchiStopBtn">⏹ やめる</button>
     </div>
 
     <div class="speed-preset-row">
-      <span>へんじの はやさ：</span>
-      <button class="preset-btn" data-delay="200">はやい 0.2秒</button>
-      <button class="preset-btn" data-delay="500">ふつう 0.5秒</button>
-      <button class="preset-btn" data-delay="1500">おそい 1.5秒</button>
+      <span>返事の速さ：</span>
+      <button class="preset-btn" data-delay="200">速い 0.2秒</button>
+      <button class="preset-btn" data-delay="500">普通 0.5秒</button>
+      <button class="preset-btn" data-delay="1500">遅い 1.5秒</button>
       <input type="range" id="aizuchiDelaySlider" min="0" max="2000" step="50" value="500">
       <span id="aizuchiDelayValue">500 ms</span>
     </div>
@@ -202,9 +202,9 @@
     <div id="aizuchiStatus" class="status-msg" aria-live="polite"></div>
   </section>
 
-  <!-- デモ④: へんじの はやさ じっけん -->
+  <!-- デモ④: 返事の速さ実験 -->
   <section class="demo-section theme-speed" id="panel-speed" data-panel="speed">
-    <h2>⏱ へんじの はやさ じっけん</h2>
+    <h2>⏱ 返事の速さ実験</h2>
     <p class="lead">AIの へんじが「はやい」時と「おそい」時で，きもちが どうかわるかな？</p>
 
     <div class="btn-row">
@@ -221,7 +221,7 @@
     </div>
 
     <div id="speedVoteArea" class="vote-area" hidden>
-      <p class="vote-question">どっちが きもちよかった？</p>
+      <p class="vote-question">どっちが 気持ちよかった？</p>
       <div class="btn-row">
         <button class="big-btn btn-primary" id="speedVoteABtn">1かいめ</button>
         <button class="big-btn btn-primary" id="speedVoteBBtn">2かいめ</button>
@@ -253,7 +253,7 @@
 </main>
 
 <section class="info-card sensei-card">
-  <h3>👨‍🏫 せんせいの けんきゅう</h3>
+  <h3>👨‍🏫 先生の研究</h3>
   <p>人と自然に おしゃべりできる AIを 作る研究を しています．</p>
   <ul class="link-list">
     <li><a href="https://youtu.be/YU_iEpFB5hA" target="_blank" rel="noopener">▶ 傾聴顔デモ（YouTube）</a></li>
@@ -264,8 +264,8 @@
 
 <section class="info-card parent-card">
   <h3>👪 おうちの人へ</h3>
-  <p>「こえを みる」「あいづちくん」「へんじの はやさ」は，声を どこにも送らず，スマホやパソコンの中だけで 動きます．</p>
-  <p>「AIと はなす」の聞き取りは，スマホやパソコンに入っている音声認識のしくみを使います．このとき，声が サービス提供者（Chrome なら Google，iPhone／iPad なら Apple）に 送られて 文字になります．翻訳は，文字だけを 翻訳サービス（Google 翻訳 など）に 送ります．</p>
+  <p>「声を見る」「あいづちくん」「返事の速さ」は，声を どこにも送らず，スマホやパソコンの中だけで 動きます．</p>
+  <p>「AIと話す」の聞き取りは，スマホやパソコンに入っている音声認識のしくみを使います．このとき，声が サービス提供者（Chrome なら Google，iPhone／iPad なら Apple）に 送られて 文字になります．翻訳は，文字だけを 翻訳サービス（Google 翻訳 など）に 送ります．</p>
   <p>このページは，声や文字を 保存したり 集めたりしません．<b>名前・学校名・住所などは 話さないように</b> してください．</p>
   </section>
 
